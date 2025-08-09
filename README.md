@@ -1,2 +1,1 @@
-Havent had time due to work to make CSS look better and horrible icons at the moment and add more features. Will have to load extension locally in dev mode.
--Creates a csv file locally
+Local Browser Extension that creates a local CSV file for your AI Prompts. Allows you to quickly search, filter, edit and copy. With security in mind, nothing is shared. Simply Load the unpacked extension and enjoy.
