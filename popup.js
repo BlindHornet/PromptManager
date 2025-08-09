@@ -1,8 +1,8 @@
 /**
  * popup.js
- * Purpose: UI logic for the popup—storage, search, bi-directional Group/Subgroup filters, CRUD, CSV import/export, validation.
+ * Purpose: Popup UI logic — storage, search, bi-directional Group/Subgroup filters, CRUD, CSV import/export, validation.
  * Storage: OPFS (Origin Private File System) file "prompts.csv" — persisted on disk, offline, no user prompts.
- * Notes: Fully offline. No external libs. Handles thousands of characters and hundreds of items.
+ * Notes: No external libs. Scales to hundreds of prompts. Safe from HTML required() blocking custom flows.
  */
 
 const STORAGE_FILENAME = "prompts.csv"; // OPFS file name
@@ -27,6 +27,7 @@ const btnNew = document.getElementById("btnNew");
 const btnEmptyCreate = document.getElementById("btnEmptyCreate");
 const btnExport = document.getElementById("btnExport");
 const fileImport = document.getElementById("fileImport");
+const clearFiltersBtn = document.getElementById("clearFilters"); // tiny ✕ button next to Subgroup
 
 // Dialog
 const promptDialog = document.getElementById("promptDialog");
@@ -63,7 +64,7 @@ const sanitize = (s) => (typeof s === "string" ? s.trim() : "");
 const nowISO = () => new Date().toISOString();
 
 function toCSV(rows) {
-  // RFC 4180-ish quoting: wrap fields containing [",\n,\r] in quotes and double up quotes
+  // RFC 4180-ish quoting
   const escape = (val) => {
     const s = String(val ?? "");
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -86,14 +87,13 @@ function toCSV(rows) {
   return lines.join("\r\n");
 }
 
-// Robust CSV parser for quoted fields and commas/newlines
 function parseCSV(text) {
+  // Robust CSV parser for quoted fields and commas/newlines
   const rows = [];
   let i = 0,
     field = "",
     row = [],
     inQuotes = false;
-
   const pushField = () => {
     row.push(field);
     field = "";
@@ -104,52 +104,51 @@ function parseCSV(text) {
   };
 
   while (i < text.length) {
-    const char = text[i];
-
+    const ch = text[i];
     if (inQuotes) {
-      if (char === '"') {
+      if (ch === '"') {
         if (text[i + 1] === '"') {
           field += '"';
-          i += 2; // escaped quote
+          i += 2;
         } else {
           inQuotes = false;
           i++;
         }
       } else {
-        field += char;
+        field += ch;
         i++;
       }
     } else {
-      if (char === '"') {
+      if (ch === '"') {
         inQuotes = true;
         i++;
-      } else if (char === ",") {
+      } else if (ch === ",") {
         pushField();
         i++;
-      } else if (char === "\r") {
+      } else if (ch === "\r") {
         i++;
         if (text[i] === "\n") i++;
         pushField();
         pushRow();
-      } else if (char === "\n") {
+      } else if (ch === "\n") {
         i++;
         pushField();
         pushRow();
       } else {
-        field += char;
+        field += ch;
         i++;
       }
     }
   }
   pushField();
   if (row.length > 1 || row.some((c) => c !== "")) pushRow();
-
   return rows;
 }
 
 function downloadBlob(filename, text) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(
+    new Blob([text], { type: "text/csv;charset=utf-8" })
+  );
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -160,70 +159,55 @@ function downloadBlob(filename, text) {
 }
 
 function dedupeKey(p) {
-  // Prevent duplicate Title within same Group/Subgroup (case-insensitive)
+  // Title uniqueness per Group/Subgroup (case-insensitive)
   return `${sanitize(p.group).toLowerCase()}::${sanitize(
     p.subgroup
   ).toLowerCase()}::${sanitize(p.title).toLowerCase()}`;
 }
 
-// ===== OPFS (Origin Private File System) I/O =====
-
+// ===== OPFS I/O =====
 async function getOPFSRoot() {
   return await navigator.storage.getDirectory();
 }
-
 async function getCSVHandle() {
   const root = await getOPFSRoot();
-  try {
-    // Try to get; if it doesn't exist, create it
-    return await root.getFileHandle(STORAGE_FILENAME, { create: true });
-  } catch {
-    return await root.getFileHandle(STORAGE_FILENAME, { create: true });
-  }
+  return await root.getFileHandle(STORAGE_FILENAME, { create: true });
 }
-
 async function readCSVText() {
-  const handle = await getCSVHandle();
-  const file = await handle.getFile();
+  const file = await (await getCSVHandle()).getFile();
   return await file.text();
 }
-
 async function writeCSVText(text) {
   const handle = await getCSVHandle();
-  const writable = await handle.createWritable();
-  await writable.write(text);
-  await writable.close();
+  const w = await handle.createWritable();
+  await w.write(text);
+  await w.close();
 }
-
-// Initialize file on first run (ensure header exists)
 async function ensureCSVInitialized() {
   try {
     const txt = await readCSVText();
     if (!txt || !txt.trim()) {
       await writeCSVText(CSV_HEADERS.join(",") + "\r\n");
     } else {
-      const header = parseCSV(txt)[0] || [];
-      const norm = header.map((h) => h.trim().toLowerCase());
+      const header = (parseCSV(txt)[0] || []).map((h) =>
+        h.trim().toLowerCase()
+      );
       const expected = CSV_HEADERS.map((h) => h.toLowerCase());
-      const ok = expected.every((h, idx) => norm[idx] === h);
-      if (!ok) {
-        await writeCSVText(CSV_HEADERS.join(",") + "\r\n");
-      }
+      const ok = expected.every((h, i) => header[i] === h);
+      if (!ok) await writeCSVText(CSV_HEADERS.join(",") + "\r\n");
     }
   } catch {
     await writeCSVText(CSV_HEADERS.join(",") + "\r\n");
   }
 }
 
-// Convert CSV text to objects
 function csvTextToObjects(text) {
   const rows = parseCSV(text);
   if (!rows || rows.length < 2) return [];
-  const header = rows[0];
   const out = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
-    if (!r || r.length < header.length) continue;
+    if (!r || r.length < CSV_HEADERS.length) continue;
     const [id, group, subgroup, title, content, createdAt, updatedAt] = r;
     if (!title?.trim() || !content?.trim()) continue;
     out.push({
@@ -240,21 +224,18 @@ function csvTextToObjects(text) {
 }
 
 // ===== Load & Save =====
-
 async function load() {
   await ensureCSVInitialized();
-  const csvText = await readCSVText();
-  allPrompts = csvTextToObjects(csvText);
+  const txt = await readCSVText();
+  allPrompts = csvTextToObjects(txt);
   render();
 }
 
 async function save() {
-  const csv = toCSV(allPrompts);
-  await writeCSVText(csv);
+  await writeCSVText(toCSV(allPrompts)); // single source of truth
 }
 
 // ===== Rendering & Filters =====
-
 function buildGroupMaps(items) {
   const groups = new Map();
   for (const p of items) {
@@ -268,56 +249,39 @@ function buildGroupMaps(items) {
 
 /**
  * Compute dynamic lists based on current selections.
- * - If a Group is selected, Subgroups are restricted to those within that Group.
- * - If a Subgroup is selected, Groups are restricted to those that contain that Subgroup.
- * - If both are selected, both lists remain restricted to the intersection.
+ * - Group selected → Subgroups restricted to that Group.
+ * - Subgroup selected → Groups restricted to those containing that Subgroup.
+ * - Both selected → intersection.
  */
 function getDynamicLists() {
-  const selectedGroup = groupFilter.value; // "" | "(Ungrouped)" | group name
-  const selectedSubgroup = subgroupFilter.value; // "" | subgroup
-
-  // Build maps
   const map = buildGroupMaps(allPrompts);
+  const selectedGroup = groupFilter.value; // "" | "(Ungrouped)" | name
+  const selectedSubgroup = subgroupFilter.value; // "" | name
 
-  // All distinct groups (labels)
   const allGroups = [...map.keys()].sort();
+  const subsIn = (g) => [...(map.get(g) || new Set())].sort();
+  const allSubgroups = [...new Set(allGroups.flatMap(subsIn))].sort();
 
-  // Helper to get subgroups in a group label
-  const subgroupsInGroup = (gLabel) =>
-    [...(map.get(gLabel) || new Set())].sort();
-
-  // All distinct subgroups overall
-  const allSubgroups = [
-    ...new Set([].concat(...allGroups.map((g) => subgroupsInGroup(g)))),
-  ].sort();
-
-  // Derive constrained lists
   let groupsList, subgroupsList;
-
   if (selectedGroup && !selectedSubgroup) {
-    // Group selected only → subgroups only from that group; groups remain all to allow switching
     groupsList = allGroups;
-    subgroupsList = subgroupsInGroup(selectedGroup);
+    subgroupsList = subsIn(selectedGroup);
   } else if (!selectedGroup && selectedSubgroup) {
-    // Subgroup selected only → groups that contain that subgroup; subgroups remain all to allow switching
     groupsList = allGroups.filter((g) => map.get(g)?.has(selectedSubgroup));
     subgroupsList = allSubgroups;
   } else if (selectedGroup && selectedSubgroup) {
-    // Both selected → intersection: keep groups that contain the subgroup, and subgroups within the group
     groupsList = allGroups.filter((g) => map.get(g)?.has(selectedSubgroup));
-    subgroupsList = subgroupsInGroup(selectedGroup);
+    subgroupsList = subsIn(selectedGroup);
   } else {
-    // None selected
     groupsList = allGroups;
     subgroupsList = allSubgroups;
   }
-
   return { groupsList, subgroupsList };
 }
 
 /**
- * Populate both filters based on current selections and direction.
- * @param {'group'|'subgroup'|null} source  which dropdown triggered the update (to avoid resetting the user's current choice unnecessarily)
+ * Populate both filters based on current selections.
+ * @param {'group'|'subgroup'|null} source Which dropdown triggered update.
  */
 function populateFilters(source = null) {
   const prevGroup = groupFilter.value;
@@ -325,14 +289,12 @@ function populateFilters(source = null) {
 
   const { groupsList, subgroupsList } = getDynamicLists();
 
-  // Rebuild group options
   groupFilter.innerHTML =
     `<option value="">All Groups</option>` +
     groupsList
       .map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`)
       .join("");
 
-  // Rebuild subgroup options
   subgroupFilter.innerHTML =
     `<option value="">All Subgroups</option>` +
     subgroupsList
@@ -341,9 +303,9 @@ function populateFilters(source = null) {
       )
       .join("");
 
-  // Try to preserve previous selections if still valid; otherwise clear them
+  // Preserve selections if still valid; otherwise clear
   if (source !== "subgroup" && prevGroup && !groupsList.includes(prevGroup)) {
-    groupFilter.value = ""; // invalid after change
+    groupFilter.value = "";
   } else {
     groupFilter.value = prevGroup;
   }
@@ -353,12 +315,11 @@ function populateFilters(source = null) {
     prevSubgroup &&
     !subgroupsList.includes(prevSubgroup)
   ) {
-    subgroupFilter.value = ""; // invalid after change
+    subgroupFilter.value = "";
   } else {
     subgroupFilter.value = prevSubgroup;
   }
 
-  // Disable subgroup if no options (besides "All")
   subgroupFilter.disabled = subgroupsList.length === 0;
 }
 
@@ -378,6 +339,7 @@ function filterItems() {
       );
     })
     .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+
   resultCount.textContent = filtered.length;
 }
 
@@ -394,13 +356,12 @@ function renderTable() {
   tbody.innerHTML = "";
   for (const p of filtered) {
     const tr = document.createElement("tr");
-    tr.tabIndex = 0; // keyboard focusable
+    tr.tabIndex = 0;
     tr.dataset.id = p.id;
 
     const modified = new Date(
       p.updatedAt || p.createdAt || Date.now()
     ).toLocaleString();
-
     tr.innerHTML = `
       <td title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</td>
       <td><span class="badge">${escapeHtml(
@@ -464,7 +425,6 @@ function render() {
 }
 
 // ===== CRUD & Dialogs =====
-
 function openCreate() {
   promptForm.reset();
   dialogTitle.textContent = "New Prompt";
@@ -490,6 +450,7 @@ function openCreate() {
 function openEdit(id) {
   const p = allPrompts.find((x) => x.id === id);
   if (!p) return;
+
   promptForm.reset();
   dialogTitle.textContent = "Edit Prompt";
   formError.textContent = "";
@@ -563,35 +524,41 @@ function validatePrompt({ id, group, subgroup, title, content }) {
 }
 
 // ===== Events: Filters/Search =====
-
 searchInput.addEventListener("input", () => {
   filterItems();
   renderTable();
 });
 
-// Group changed → recompute both dropdowns with source='group'
+// Group changed → recompute lists from group perspective
 groupFilter.addEventListener("change", () => {
   populateFilters("group");
   filterItems();
   renderTable();
 });
 
-// Subgroup changed → recompute both dropdowns with source='subgroup'
+// Subgroup changed → recompute lists from subgroup perspective
 subgroupFilter.addEventListener("change", () => {
   populateFilters("subgroup");
   filterItems();
   renderTable();
 });
 
-// ===== Events: New/Edit/Delete =====
+// Tiny ✕ button to clear both filters (safe if button not present yet)
+clearFiltersBtn?.addEventListener("click", () => {
+  groupFilter.value = "";
+  subgroupFilter.value = "";
+  populateFilters(null);
+  filterItems();
+  renderTable();
+});
 
+// ===== Events: New/Edit/Delete =====
 btnNew.addEventListener("click", openCreate);
 btnEmptyCreate.addEventListener("click", openCreate);
 
 btnExport.addEventListener("click", async () => {
-  const csv = toCSV(allPrompts);
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  downloadBlob(`prompts-${ts}.csv`, csv);
+  downloadBlob(`prompts-${ts}.csv`, toCSV(allPrompts));
 });
 
 fileImport.addEventListener("change", (e) => {
@@ -631,7 +598,7 @@ fileImport.addEventListener("change", (e) => {
         existingKeys.add(key);
         imported++;
       }
-      await save(); // write to OPFS
+      await save();
       render();
       alert(`Imported ${imported} prompt(s).`);
     } catch (err) {
@@ -665,12 +632,12 @@ promptForm.addEventListener("submit", async (e) => {
     return;
   }
 
-  const existingIndex = allPrompts.findIndex((p) => p.id === id);
+  const idx = allPrompts.findIndex((p) => p.id === id);
   const now = nowISO();
 
-  if (existingIndex >= 0) {
-    allPrompts[existingIndex] = {
-      ...allPrompts[existingIndex],
+  if (idx >= 0) {
+    allPrompts[idx] = {
+      ...allPrompts[idx],
       group,
       subgroup,
       title,
@@ -693,8 +660,8 @@ promptForm.addEventListener("submit", async (e) => {
     await save(); // persist to OPFS CSV
     promptDialog.close();
     render();
-  } catch (err2) {
-    formError.textContent = `Save failed: ${err2.message || err2}`;
+  } catch (e2) {
+    formError.textContent = `Save failed: ${e2.message || e2}`;
   }
 });
 
@@ -704,7 +671,7 @@ confirmForm.addEventListener("submit", async (e) => {
   const idx = allPrompts.findIndex((p) => p.id === id);
   if (idx >= 0) {
     allPrompts.splice(idx, 1);
-    await save(); // persist deletion
+    await save();
     render();
   }
   confirmDialog.close();
@@ -729,17 +696,18 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-groupSelect.addEventListener("change", () => {
-  const g = sanitize(groupSelect.value);
-  const actual = g || "(Ungrouped)";
+// Dialog: when Group changes, narrow Subgroup list
+groupSelect?.addEventListener("change", () => {
+  const g = sanitize(groupSelect.value) || "(Ungrouped)";
   const map = buildGroupMaps(allPrompts);
-  const subs = [...(map.get(actual) || new Set())];
+  const subs = [...(map.get(g) || new Set())];
   subgroupSelect.innerHTML =
     `<option value="">(None)</option>` +
     subs.map((s) => `<option>${escapeHtml(s)}</option>`).join("");
   subgroupSelect.disabled = false;
 });
 
+// Row click to edit
 tbody.addEventListener("click", (e) => {
   const tr = e.target.closest("tr");
   if (!tr || e.target.closest("button")) return;
