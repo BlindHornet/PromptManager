@@ -502,8 +502,14 @@ function openEdit(p) {
 }
 
 function openConfirmDelete(p) {
-  confirmTitle.textContent = `Delete “${p.title || "(Untitled)"}”?`;
-  document.getElementById("confirmPromptId").value = p.id;
+  const el =
+    document.getElementById("confirmTitle") ||
+    document.getElementById("confirmText");
+  if (el) {
+    el.textContent = `Delete “${p.title || "(Untitled)"}”?`;
+  }
+  const idField = document.getElementById("confirmPromptId");
+  if (idField) idField.value = p.id;
   confirmDialog.showModal();
 }
 
