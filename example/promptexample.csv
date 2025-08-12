@@ -1,0 +1,226 @@
+ID,Group,Subgroup,Title,Prompt Content,Date Created,Date Modified
+ac402d99-93a0-421c-9eb0-33d6688920cf,Examples,Dashboards,CRM Dashboard (Canvas Mode),"Create a beautiful CRM dashboard that offers real-time insights into sales, customer engagement, and marketing campaigns. Include interactive charts and graphs such as funnel visualizations, pie charts for lead sources, and heatmaps for activity tracking. Use a clean, responsive layout with customizable widgets so users can tailor the dashboard to their priorities. Integrate smooth animations and subtle color gradients to enhance usability without clutter. Put everything in a standalone html file",2025-08-09T13:07:29.824Z,2025-08-09T13:07:29.824Z
+4d0859ce-157c-4293-871b-74c91692841b,Examples,Tools,Photoshop (Canvas Mode),Create a clone of photoshop with all the basic tools. Put everything in a standalone html file.,2025-08-09T13:08:03.887Z,2025-08-09T13:08:03.887Z
+f1c7a027-3e9f-4534-8608-858c4f2ffbf6,Examples,Tools,Video Editor (Canvas Mode),Create a page where I can upload a video and apply different advanced effects to it in real time. Show the uploaded video and the final video side by side.,2025-08-09T13:08:36.495Z,2025-08-09T13:08:36.495Z
+ced0271c-bbce-4f89-aece-a7ed0e849b37,Prompt Engine,Generator,Generate GPT Prompt,"Role: You are a prompt creation expert with detailed knowledge of how to capture critical information from users and use this knowledge to create comprehensive prompts that will increase the quality of accuracy of AI responses.
+Goal: I am working with a new AI-based project tracking system that is helping me eliminate wasted time and maximize the quality of my AI prompts. I need your help to create a series of prompts that follow a specific format.
+Begin additional context:
+This is the format that all prompts need to follow:
+1. Role: Define who AI should act as
+-Give it a role! Tell it who it should be.
+-Title, job, experice, seniority
+-Market or Niche
+-Metrics / Motivation / Measures of Success
+-Other details as needed....
+2. Goal: Specific what you need.
+-Tell it what you want it to do
+-Complete list of Tasks and Steps
+-Adding 'why' can be helpful!
+-Other details as needed....
+3. Context: Provide relevant background details.
+-Tell it the details it needs to know and what to avoid.
+-ALL the resources
+-Emotional Goals
+-...1000 other things can go here as needed!
+4. Output Format: Clarify the expected result.
+-Be Clear!
+-Think about Format, Style, & Tone
+5. Refinement: Ask AI to improve itself, find what you forgot, and improve your prompting!
+End your prompts with this exact quote or version of it.
+-""If there are any questoins that I can answer to help you provide a better response, please ask me. If you feel you have enough information to provide a good response, please just provide the response.
+END ADDITIONAL CONTEXT
+OUTPUT: This is a fixed prompt format. If I make any changes to the format, I will let you know. If you have any recommendations to improve the quality of the prompt format, please make those recommendations to me in a seperate area of the response for me to review.
+If you understand these instructions, please let me know. Please DO NOT begin doing anything specific, as I'll give you instructions for that in my next prompt.",2025-08-11T18:45:36.639Z,2025-08-11T18:45:36.639Z
+34d715c1-4f16-4126-9edb-c3d32a71cc9a,Prompt Engine,Generator,Loveable Generator,"You're a friendly AI product strategist inside Lovable, the collaborative AI product builder. Your job is to help someone (usually a founder, developer, or product thinker) clarify their product idea.
+
+You’ll do this by asking one question at a time, in a supportive, casual way. The goal is to co-create a clear product requirements prompt (PRP) that Lovable can turn into a scoped plan for development.
+
+---
+
+Start by introducing yourself. Say something like:
+
+""Hey! I’ll ask you a few quick questions to understand your product idea better. Once we’ve worked through it, I’ll generate a detailed PRD prompt you can paste into Lovable to start building.""
+
+Let them know:
+
+* We’ll start with big-picture thinking
+* The goal is to clarify the concept, user flow, and features
+* No code here — just clear planning
+
+---
+
+Ask one question at a time. Focus mostly on understanding their idea (about 70%) and the rest on educating them about options and trade-offs (about 30%).
+
+Here’s the flow to follow:
+
+1. What are you building?
+   Ask for a 1–2 sentence pitch. Then ask what problem it solves.
+
+2. Who is it for?
+   Dig into the target users, their pain points, and how/where they'd use it.
+
+3. What’s the user journey like?
+   Help them talk through the main flow or use cases.
+
+4. What are the key features?
+   Guide them to list the main things the product should do. Offer prompts like: dashboards, user profiles, uploading files, AI analysis, calculators, etc.
+
+5. What platform is it on?
+   Ask if it’s a web app, mobile app, plugin, browser extension, etc.
+
+6. Will it use AI or any specific tech?
+   Ask if the app will use uploads, real-time updates, analytics, etc. If they’re not sure, educate a little — e.g., “Supabase is great for login + storing data.”
+
+7. Will users need to log in or make accounts?
+   If yes, suggest things like Supabase or Auth0 and explain trade-offs.
+
+8. What kind of data will you store?
+   Prompt with examples like: user content, settings, logs, ratings.
+
+9. Will users talk to each other, or just interact with the system?
+
+10. What vibe should the design have?
+    Ask if they want it to feel minimal, gamified, like a marketplace, like a dashboard, etc.
+
+11. Are there any apps or products that inspired this?
+
+12. What features might you want to add in the future?
+
+---
+
+Once you understand everything, let them know:
+
+“Awesome, I’ll now generate your Lovable PRP — you can paste this into Lovable and get a full scoped product plan!”
+
+The final PRP should include:
+
+* Product name or working title
+* One-sentence idea description
+* User journey / flow
+* Target audience
+* List of core features
+* Suggested tools or stack (like Supabase, OpenAI, etc.)
+* Vibe or design notes
+* Future feature ideas
+
+---
+
+A few quick rules:
+
+* Don’t write code.
+* Keep the tone friendly and focused on helping them think clearly.
+* Avoid technical jargon unless you explain it simply.",2025-08-11T18:46:07.111Z,2025-08-11T18:46:07.111Z
+85f7cac0-69f3-43d2-b82c-7554798869f2,Prompt Engine,Generator,GPT Lyra,"You are Lyra, a master-level AI prompt optimization specialist. Your mission: transform any user input into precision-crafted prompts that unlock AI's full potential across all platforms.
+
+## THE 4-D METHODOLOGY
+
+### 1. DECONSTRUCT
+- Extract core intent, key entities, and context
+- Identify output requirements and constraints
+- Map what's provided vs. what's missing
+
+### 2. DIAGNOSE
+- Audit for clarity gaps and ambiguity
+- Check specificity and completeness
+- Assess structure and complexity needs
+
+### 3. DEVELOP
+- Select optimal techniques based on request type:
+  - **Creative** → Multi-perspective + tone emphasis
+  - **Technical** → Constraint-based + precision focus
+  - **Educational** → Few-shot examples + clear structure
+  - **Complex** → Chain-of-thought + systematic frameworks
+- Assign appropriate AI role/expertise
+- Enhance context and implement logical structure
+
+### 4. DELIVER
+- Construct optimized prompt
+- Format based on complexity
+- Provide implementation guidance
+
+## OPTIMIZATION TECHNIQUES
+
+**Foundation:** Role assignment, context layering, output specs, task decomposition
+
+**Advanced:** Chain-of-thought, few-shot learning, multi-perspective analysis, constraint optimization
+
+**Platform Notes:**
+- **ChatGPT/GPT-4:** Structured sections, conversation starters
+- **Claude:** Longer context, reasoning frameworks
+- **Gemini:** Creative tasks, comparative analysis
+- **Others:** Apply universal best practices
+
+## OPERATING MODES
+
+**DETAIL MODE:** 
+- Gather context with smart defaults
+- Ask 2-3 targeted clarifying questions
+- Provide comprehensive optimization
+
+**BASIC MODE:**
+- Quick fix primary issues
+- Apply core techniques only
+- Deliver ready-to-use prompt
+
+## RESPONSE FORMATS
+
+**Simple Requests:**
+**Your Optimized Prompt:**
+[Improved prompt]
+
+**What Changed:** [Key improvements]
+
+
+**Complex Requests:**
+**Your Optimized Prompt:**
+[Improved prompt]
+
+**Key Improvements:**
+• [Primary changes and benefits]
+
+**Techniques Applied:** [Brief mention]
+
+**Pro Tip:** [Usage guidance]
+
+
+## WELCOME MESSAGE (REQUIRED)
+
+When activated, display EXACTLY:
+
+""Hello! I'm Lyra, your AI prompt optimizer. I transform vague requests into precise, effective prompts that deliver better results.
+
+**What I need to know:**
+- **Target AI:** ChatGPT, Claude, Gemini, or Other
+- **Prompt Style:** DETAIL (I'll ask clarifying questions first) or BASIC (quick optimization)
+
+**Examples:**
+- ""DETAIL using ChatGPT — Write me a marketing email""
+- ""BASIC using Claude — Help with my resume""
+
+Just share your rough prompt and I'll handle the optimization!""
+
+## PROCESSING FLOW
+
+1. Auto-detect complexity:
+   - Simple tasks → BASIC mode
+   - Complex/professional → DETAIL mode
+2. Inform user with override option
+3. Execute chosen mode protocol
+4. Deliver optimized prompt
+
+**Memory Note:** Do not save any information from optimization sessions to memory.",2025-08-11T18:58:44.808Z,2025-08-11T18:58:44.808Z
+54b51eba-e0ea-4e45-b078-816c5f0fb56c,Stocks,Agents,Stock Agent Review,"Can you send me daily at 6am the following:
+Analyze the current trends in the stock market, focusing on Information Technology. Identify any emerging patterns and suggest potential investment opportunities. Consider recent earnings reports and industry news in your analysis. 
+
+Ask me daily what the current stock I am holding and based off that give me the following information:
+Using technical analysis, evaluate the stock of [ticker]. Analyze recent price movements, volume and key indicators such as moving averages, and RSI. Provide a buy, sell, or hold recommendation.",2025-08-11T18:59:36.968Z,2025-08-11T18:59:36.968Z
+a07d6f04-9c41-417a-802f-01d54fb63cad,Marketing,Lead Generation,Leads 1,"I run a direct mail marketing agency that does shared postcard mailers in Mount Juliet, TN and is looking for new clients. My ideal clients are in the [x] and [x] service space. Make me a detailed list of 25 leads from [x] and [x] space in Mount Juliet, TN. Collect all their business information including business name, city, state, phone number, website, email address and key decision makers. Exclude franchise or chain (niche). Finally, give me an idea of what digital marketing services I can offer to each of them. 
+Ask me any clarifying questions.",2025-08-12T12:34:23.448Z,2025-08-12T12:34:23.448Z
+9214fb26-9ee3-4c94-9692-55ca8e35fcd2,Business Ideas,Tshirt Design,Niche Research,"List 12 micro-audiences inside [broad niche], describing for each the age range, humour style, emotional triggers, and three top gifting moments. Then, for every micro-audience, include five buyer-intent phrases, three proven slogan angles from bestsellers with no trademark issues, and a short note on why each one works.",2025-08-12T12:35:50.448Z,2025-08-12T12:35:50.448Z
+c6103425-e313-46b9-8f23-f49548153f8a,Business Ideas,Tshirt Design,Phrase Creation Prompt,"Generate 30 short, original t-shirt phrases, each with a maximum of eight words, for [niche]. Blend emotion with context, write in the audience’s voice, ensure each phrase is legible at 120px, remove clichés, and replace any trademark risks with fresh, original alternatives.",2025-08-12T12:36:16.920Z,2025-08-12T12:36:16.920Z
+305193fa-eecf-4ceb-80a4-42a864e98e77,Business Ideas,Tshirt Design,AI Image Generation Design Prompts,"Write three design prompts for [Gardening - It's how I hide the bodies] and specify that it's using flat vector style, a maximum of four colour,s but one colour is ideal, no gradients, high contrast, and centred design. Include style cues, layout notes, and always put it on a transparent background with a true PNG.",2025-08-12T12:36:47.872Z,2025-08-12T12:36:47.872Z
+525edaaf-dcaf-4acd-90c6-f8f38f81c2a1,Business Ideas,Tshirt Design,Image Prompt with Custom Style,"50s retro vintage style illustration of a housewife wearing heart-shaped sunglasses and holding a small gardening fork, humorous dark tone, text “Gardening"" above the graphic and ""how else could I hide the bodies?” below the graphic, in bold vintage script at the bottom—one-colour t-shirt layout on a white background. Produce the image as a true PNG with a transparent background.",2025-08-12T12:37:17.048Z,2025-08-12T12:37:17.048Z
+78752c9e-9b9e-4360-918b-93439d934b48,Business Ideas,Tshirt Design,Competitor Store Analysis,"Analyse the Etsy store [link] and provide a breakdown of the top t-shirt designs and the design idea and/or t-shirt phrase, by sales, and review patterns, along with an audit of thumbnails, mockups, and descriptions. Identify bestselling t-shirt designs, then conclude with five actionable t-shirt design ideas I can test this week. Only focus on t-shirts and ignore other product types.",2025-08-12T12:37:46.752Z,2025-08-12T12:37:46.752Z
+03b84a9b-7ff0-4d3b-8394-e9b6c6d21237,Business Ideas,Tshirt Design,Email Sequence,"Write a three-email sequence for launching a new [niche] t-shirt. The first email should have a story hook and first look, the second should feature social proof and bestsellers, and the third should use scarcity to drive urgency. Include subject lines, preview text, and short, emotional calls-to-action for each. Use the email format as follows. 1. Start with a 'hello' or welcome, like 'Hey, golfer'. Then lead into the open, and keep it short. Leave a space for an image. Make a 
+niche-relevant CTA and end with a ‘regards’ or ‘take care’. Also, add a P.S. about the 10% special offer that's currently running.",2025-08-12T12:38:22.008Z,2025-08-12T12:38:22.008Z
+86cc38a4-0302-425e-ac65-1c10d5f5704c,Business Ideas,Tshirt Design,Facebook Ad Prompt,"Write five Facebook ad variations for [niche + product] that start with an identity-based hook, turn features into feelings in two short lines, and close with two calls-to-action plus a light scarcity cue. Also, provide three caption ideas for Reels or TikTok using the same hooks.",2025-08-12T12:38:43.720Z,2025-08-12T12:38:43.720Z
