@@ -450,7 +450,7 @@ function applyFiltersAndRender() {
 function dialogPopulateGroups(selected = "") {
   const groups = uniqueSorted(allPrompts.map((p) => p.group || ""));
   groupSelect.innerHTML =
-    `<option value="">(New Group… type below)</option>` +
+    `<option value="">New Group…</option>` +
     groups.map((g) => `<option>${g}</option>`).join("");
   groupSelect.value = selected && groups.includes(selected) ? selected : "";
 }
@@ -462,7 +462,7 @@ function dialogPopulateSubgroups(groupValue, selected = "") {
       .map((p) => p.subgroup || "")
   );
   subgroupSelect.innerHTML =
-    `<option value="">(New Subgroup… type below)</option>` +
+    `<option value="">New Subgroup…</option>` +
     subs.map((s) => `<option>${s}</option>`).join("");
   subgroupSelect.disabled = !groupValue;
   subgroupSelect.value = selected && subs.includes(selected) ? selected : "";
