@@ -1,11 +1,13 @@
 /**
  * popup.js
- * Purpose: Popup UI logic — storage, search, bi-directional Group/Subgroup filters, CRUD, CSV import/export, validation.
- * Storage: OPFS (Origin Private File System) file "prompts.csv" — persisted on disk, offline, no user prompts.
- * Notes: No external libs. Scales to hundreds of prompts. Safe from HTML required() blocking custom flows.
+ * Groups → Subgroups → Items tree, filters, and CRUD dialogs.
+ * - Filter selection auto-expands the matching group/subgroup
+ * - Create/Edit dialogs list existing groups/subgroups
+ * - Rows are clickable to expand/collapse (no separate arrow box)
+ * - Highlights text between [brackets] in yellow in contentInput contenteditable div
  */
 
-const STORAGE_FILENAME = "prompts.csv"; // OPFS file name
+const STORAGE_FILENAME = "prompts.csv";
 const CSV_HEADERS = [
   "ID",
   "Group",
@@ -16,79 +18,8 @@ const CSV_HEADERS = [
   "Date Modified",
 ];
 
-// --- DOM Refs
-const searchInput = document.getElementById("searchInput");
-const groupFilter = document.getElementById("groupFilter");
-const subgroupFilter = document.getElementById("subgroupFilter");
-const resultCount = document.getElementById("resultCount");
-const tbody = document.getElementById("promptTbody");
-const emptyState = document.getElementById("emptyState");
-const btnNew = document.getElementById("btnNew");
-const btnEmptyCreate = document.getElementById("btnEmptyCreate");
-const btnExport = document.getElementById("btnExport");
-const fileImport = document.getElementById("fileImport");
-const clearFiltersBtn = document.getElementById("clearFilters"); // tiny ✕ button next to Subgroup
-
-// Dialog
-const promptDialog = document.getElementById("promptDialog");
-const promptForm = document.getElementById("promptForm");
-const dialogTitle = document.getElementById("dialogTitle");
-const groupSelect = document.getElementById("groupSelect");
-const groupNew = document.getElementById("groupNew");
-const subgroupSelect = document.getElementById("subgroupSelect");
-const subgroupNew = document.getElementById("subgroupNew");
-const titleInput = document.getElementById("titleInput");
-const contentInput = document.getElementById("contentInput");
-const promptIdInput = document.getElementById("promptId");
-const formError = document.getElementById("formError");
-const btnDialogCancel = document.getElementById("btnDialogCancel");
-const btnDialogSave = document.getElementById("btnDialogSave");
-
-// Confirm delete
-const confirmDialog = document.getElementById("confirmDialog");
-const confirmForm = document.getElementById("confirmForm");
-const confirmText = document.getElementById("confirmText");
-const confirmPromptId = document.getElementById("confirmPromptId");
-const btnConfirmCancel = document.getElementById("btnConfirmCancel");
-
-// --- State
-let allPrompts = [];
-let filtered = [];
-
-// --- Utils
-const uuid = () =>
-  crypto?.randomUUID
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const sanitize = (s) => (typeof s === "string" ? s.trim() : "");
-const nowISO = () => new Date().toISOString();
-
-function toCSV(rows) {
-  // RFC 4180-ish quoting
-  const escape = (val) => {
-    const s = String(val ?? "");
-    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const lines = [CSV_HEADERS.join(",")];
-  for (const r of rows) {
-    lines.push(
-      [
-        escape(r.id),
-        escape(r.group),
-        escape(r.subgroup),
-        escape(r.title),
-        escape(r.content),
-        escape(r.createdAt),
-        escape(r.updatedAt),
-      ].join(",")
-    );
-  }
-  return lines.join("\r\n");
-}
-
+/* ============ CSV helpers ============ */
 function parseCSV(text) {
-  // Robust CSV parser for quoted fields and commas/newlines
   const rows = [];
   let i = 0,
     field = "",
@@ -104,81 +35,83 @@ function parseCSV(text) {
   };
 
   while (i < text.length) {
-    const ch = text[i];
+    const ch = text[i++];
     if (inQuotes) {
       if (ch === '"') {
-        if (text[i + 1] === '"') {
+        if (text[i] === '"') {
           field += '"';
-          i += 2;
+          i++;
         } else {
           inQuotes = false;
-          i++;
         }
-      } else {
-        field += ch;
-        i++;
-      }
+      } else field += ch;
     } else {
-      if (ch === '"') {
-        inQuotes = true;
-        i++;
-      } else if (ch === ",") {
+      if (ch === ",") pushField();
+      else if (ch === "\n") {
         pushField();
-        i++;
+        pushRow();
       } else if (ch === "\r") {
-        i++;
-        if (text[i] === "\n") i++;
-        pushField();
-        pushRow();
-      } else if (ch === "\n") {
-        i++;
-        pushField();
-        pushRow();
-      } else {
-        field += ch;
-        i++;
-      }
+        /* ignore */
+      } else if (ch === '"') inQuotes = true;
+      else field += ch;
     }
   }
   pushField();
-  if (row.length > 1 || row.some((c) => c !== "")) pushRow();
+  if (row.length) pushRow();
   return rows;
 }
-
-function downloadBlob(filename, text) {
-  const url = URL.createObjectURL(
-    new Blob([text], { type: "text/csv;charset=utf-8" })
-  );
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+function toCSV(items) {
+  const escape = (v) => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [CSV_HEADERS.join(",")];
+  for (const p of items) {
+    lines.push(
+      [
+        escape(p.id),
+        escape(p.group),
+        escape(p.subgroup),
+        escape(p.title),
+        escape(p.content),
+        escape(p.createdAt),
+        escape(p.updatedAt),
+      ].join(",")
+    );
+  }
+  return lines.join("\r\n");
+}
+function csvTextToObjects(text) {
+  const rows = parseCSV(text);
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    if (!r.length || r.every((c) => !c || !String(c).trim())) continue;
+    out.push({
+      id: r[0] ?? "",
+      group: r[1] ?? "",
+      subgroup: r[2] ?? "",
+      title: r[3] ?? "",
+      content: r[4] ?? "",
+      createdAt: r[5] ?? "",
+      updatedAt: r[6] ?? "",
+    });
+  }
+  return out;
 }
 
-function dedupeKey(p) {
-  // Title uniqueness per Group/Subgroup (case-insensitive)
-  return `${sanitize(p.group).toLowerCase()}::${sanitize(
-    p.subgroup
-  ).toLowerCase()}::${sanitize(p.title).toLowerCase()}`;
-}
-
-// ===== OPFS I/O =====
-async function getOPFSRoot() {
-  return await navigator.storage.getDirectory();
-}
-async function getCSVHandle() {
-  const root = await getOPFSRoot();
-  return await root.getFileHandle(STORAGE_FILENAME, { create: true });
+/* ============ OPFS helpers ============ */
+async function getOPFSFileHandle() {
+  const root = await navigator.storage.getDirectory();
+  return root.getFileHandle(STORAGE_FILENAME, { create: true });
 }
 async function readCSVText() {
-  const file = await (await getCSVHandle()).getFile();
+  const handle = await getOPFSFileHandle();
+  const file = await handle.getFile();
   return await file.text();
 }
 async function writeCSVText(text) {
-  const handle = await getCSVHandle();
+  const handle = await getOPFSFileHandle();
   const w = await handle.createWritable();
   await w.write(text);
   await w.close();
@@ -201,150 +134,61 @@ async function ensureCSVInitialized() {
   }
 }
 
-function csvTextToObjects(text) {
-  const rows = parseCSV(text);
-  if (!rows || rows.length < 2) return [];
-  const out = [];
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i];
-    if (!r || r.length < CSV_HEADERS.length) continue;
-    const [id, group, subgroup, title, content, createdAt, updatedAt] = r;
-    if (!title?.trim() || !content?.trim()) continue;
-    out.push({
-      id: sanitize(id) || uuid(),
-      group: sanitize(group),
-      subgroup: sanitize(subgroup),
-      title: sanitize(title),
-      content: sanitize(content),
-      createdAt: sanitize(createdAt) || nowISO(),
-      updatedAt: sanitize(updatedAt) || nowISO(),
-    });
-  }
-  return out;
-}
+/* ============ State & DOM ============ */
+let allPrompts = [];
+let filteredPrompts = [];
 
-// ===== Load & Save =====
-async function load() {
-  await ensureCSVInitialized();
-  const txt = await readCSVText();
-  allPrompts = csvTextToObjects(txt);
-  render();
-}
+// filters/tree
+let searchInput,
+  groupFilter,
+  subgroupFilter,
+  clearFiltersBtn,
+  resultCount,
+  emptyState,
+  treeRoot;
+// toolbar
+let btnNew, btnEmptyCreate, btnExport, fileImport;
+// dialogs
+let promptDialog,
+  promptForm,
+  dialogTitle,
+  inputId,
+  inputTitle,
+  inputContent,
+  groupSelect,
+  inputGroup,
+  subgroupSelect,
+  inputSubgroup;
+let confirmDialog, confirmForm, confirmTitle, btnDialogCancel, btnConfirmCancel;
 
-async function save() {
-  await writeCSVText(toCSV(allPrompts)); // single source of truth
-}
-
-// ===== Rendering & Filters =====
-function buildGroupMaps(items) {
-  const groups = new Map();
+/* ============ Utils ============ */
+function groupMapFrom(items) {
+  const g = new Map();
   for (const p of items) {
-    const g = sanitize(p.group) || "(Ungrouped)";
-    const s = sanitize(p.subgroup) || "";
-    if (!groups.has(g)) groups.set(g, new Set());
-    if (s) groups.get(g).add(s);
+    const G = (p.group || "").trim();
+    const S = (p.subgroup || "").trim();
+    if (!g.has(G)) g.set(G, new Map());
+    const sub = g.get(G);
+    if (!sub.has(S)) sub.set(S, []);
+    const arr = sub.get(S);
+    if (Array.isArray(arr)) arr.push(p);
+    else sub.set(S, [p]);
   }
-  return groups;
+  return g;
+}
+function pathMatchesSearch(items) {
+  const q = (searchInput?.value || "").trim().toLowerCase();
+  if (!q || !Array.isArray(items)) return false;
+  return items.some(
+    (it) =>
+      (it?.title || "").toLowerCase().includes(q) ||
+      (it?.content || "").toLowerCase().includes(q)
+  );
 }
 
-/**
- * Compute dynamic lists based on current selections.
- * - Group selected → Subgroups restricted to that Group.
- * - Subgroup selected → Groups restricted to those containing that Subgroup.
- * - Both selected → intersection.
- */
-function getDynamicLists() {
-  const map = buildGroupMaps(allPrompts);
-  const selectedGroup = groupFilter.value; // "" | "(Ungrouped)" | name
-  const selectedSubgroup = subgroupFilter.value; // "" | name
-
-  const allGroups = [...map.keys()].sort();
-  const subsIn = (g) => [...(map.get(g) || new Set())].sort();
-  const allSubgroups = [...new Set(allGroups.flatMap(subsIn))].sort();
-
-  let groupsList, subgroupsList;
-  if (selectedGroup && !selectedSubgroup) {
-    groupsList = allGroups;
-    subgroupsList = subsIn(selectedGroup);
-  } else if (!selectedGroup && selectedSubgroup) {
-    groupsList = allGroups.filter((g) => map.get(g)?.has(selectedSubgroup));
-    subgroupsList = allSubgroups;
-  } else if (selectedGroup && selectedSubgroup) {
-    groupsList = allGroups.filter((g) => map.get(g)?.has(selectedSubgroup));
-    subgroupsList = subsIn(selectedGroup);
-  } else {
-    groupsList = allGroups;
-    subgroupsList = allSubgroups;
-  }
-  return { groupsList, subgroupsList };
-}
-
-/**
- * Populate both filters based on current selections.
- * @param {'group'|'subgroup'|null} source Which dropdown triggered update.
- */
-function populateFilters(source = null) {
-  const prevGroup = groupFilter.value;
-  const prevSubgroup = subgroupFilter.value;
-
-  const { groupsList, subgroupsList } = getDynamicLists();
-
-  groupFilter.innerHTML =
-    `<option value="">All Groups</option>` +
-    groupsList
-      .map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`)
-      .join("");
-
-  subgroupFilter.innerHTML =
-    `<option value="">All Subgroups</option>` +
-    subgroupsList
-      .map(
-        (sg) => `<option value="${escapeHtml(sg)}">${escapeHtml(sg)}</option>`
-      )
-      .join("");
-
-  // Preserve selections if still valid; otherwise clear
-  if (source !== "subgroup" && prevGroup && !groupsList.includes(prevGroup)) {
-    groupFilter.value = "";
-  } else {
-    groupFilter.value = prevGroup;
-  }
-
-  if (
-    source !== "group" &&
-    prevSubgroup &&
-    !subgroupsList.includes(prevSubgroup)
-  ) {
-    subgroupFilter.value = "";
-  } else {
-    subgroupFilter.value = prevSubgroup;
-  }
-
-  subgroupFilter.disabled = subgroupsList.length === 0;
-}
-
-function filterItems() {
-  const q = sanitize(searchInput.value).toLowerCase();
-  const g = groupFilter.value;
-  const sg = subgroupFilter.value;
-
-  filtered = allPrompts
-    .filter((p) => {
-      const groupLabel = sanitize(p.group) || "(Ungrouped)";
-      if (g && groupLabel !== g) return false;
-      if (sg && sanitize(p.subgroup) !== sg) return false;
-      if (!q) return true;
-      return (
-        p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-
-  resultCount.textContent = filtered.length;
-}
-
-function escapeHtml(s) {
-  return String(s)
+/* ============ Bracket Highlighting ============ */
+function escapeHtml(text) {
+  return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -352,368 +196,478 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
-function renderTable() {
-  tbody.innerHTML = "";
-  for (const p of filtered) {
-    const tr = document.createElement("tr");
-    tr.tabIndex = 0;
-    tr.dataset.id = p.id;
-
-    const modified = new Date(
-      p.updatedAt || p.createdAt || Date.now()
-    ).toLocaleString();
-    tr.innerHTML = `
-      <td title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</td>
-      <td><span class="badge">${escapeHtml(
-        p.group || "(Ungrouped)"
-      )}</span></td>
-      <td>${
-        p.subgroup ? `<span class="badge">${escapeHtml(p.subgroup)}</span>` : ""
-      }</td>
-      <td><span class="muted">${escapeHtml(modified)}</span></td>
-      <td>
-        <div class="row-actions">
-          <button class="btn" data-action="copy" title="Copy content">Copy</button>
-          <button class="btn" data-action="edit" title="Edit (Enter)">Edit</button>
-          <button class="btn danger" data-action="delete" title="Delete">Delete</button>
-        </div>
-      </td>
-    `;
-
-    tr.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        openEdit(p.id);
-      }
-      if (e.key === "Delete") {
-        e.preventDefault();
-        openDelete(p.id);
-      }
-    });
-
-    tr.querySelector('[data-action="copy"]').addEventListener(
-      "click",
-      async () => {
-        try {
-          await navigator.clipboard.writeText(p.content);
-        } catch {
-          const ta = document.createElement("textarea");
-          ta.value = p.content;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand("copy");
-          ta.remove();
-        }
-      }
-    );
-    tr.querySelector('[data-action="edit"]').addEventListener("click", () =>
-      openEdit(p.id)
-    );
-    tr.querySelector('[data-action="delete"]').addEventListener("click", () =>
-      openDelete(p.id)
-    );
-
-    tbody.appendChild(tr);
-  }
+function highlightBrackets() {
+  if (!inputContent) return;
+  const text = inputContent.innerText || "";
+  const regex = /\[([^\]]*)\]/g;
+  const highlighted = text.replace(regex, (match) => {
+    return `<span class="highlight-bracket">${match}</span>`;
+  });
+  inputContent.innerHTML = highlighted.replace(/\n/g, "<br>");
+  // Move cursor to end after updating content
+  const range = document.createRange();
+  const sel = window.getSelection();
+  range.selectNodeContents(inputContent);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
-function render() {
-  populateFilters(null);
-  filterItems();
-  renderTable();
+/* ============ Rendering ============ */
+function renderTree() {
+  const gSel = groupFilter?.value || "";
+  const sSel = subgroupFilter?.value || "";
+
+  treeRoot.innerHTML = "";
+  const gMap = groupMapFrom(filteredPrompts);
+  const groups = Array.from(gMap.keys()).sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { sensitivity: "base" })
+  );
+
+  for (const g of groups) {
+    const subMap = gMap.get(g);
+
+    const gLi = document.createElement("li");
+    gLi.className = "tree-group";
+    gLi.setAttribute("role", "treeitem");
+    gLi.setAttribute("aria-expanded", "false");
+
+    const gHeader = document.createElement("div");
+    gHeader.className = "tree-row group-row";
+
+    const gToggle = document.createElement("button");
+    gToggle.className = "toggle";
+    gToggle.setAttribute("aria-label", "Expand/Collapse Group");
+    gToggle.textContent = "▶";
+    gHeader.appendChild(gToggle);
+
+    const gIcon = document.createElement("span");
+    gIcon.className = "icon folder";
+    gHeader.appendChild(gIcon);
+
+    const gLabel = document.createElement("span");
+    gLabel.className = "label";
+    gLabel.textContent = g || "(Ungrouped)";
+    gHeader.appendChild(gLabel);
+
+    const gNode = document.createElement("ul");
+    gNode.className = "children";
+    gNode.setAttribute("role", "group");
+
+    gLi.appendChild(gHeader);
+    gLi.appendChild(gNode);
+
+    let gExpanded = gSel && g === gSel;
+    const allItemsInGroup = Array.from(subMap.values())
+      .filter(Array.isArray)
+      .flat();
+    if (!gExpanded && pathMatchesSearch(allItemsInGroup)) gExpanded = true;
+
+    const subgroups = Array.from(subMap.keys()).sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { sensitivity: "base" })
+    );
+
+    for (const s of subgroups) {
+      const items = subMap.get(s);
+
+      const sgLi = document.createElement("li");
+      sgLi.className = "tree-subgroup";
+      sgLi.setAttribute("role", "treeitem");
+      sgLi.setAttribute("aria-expanded", "false");
+
+      const sgHeader = document.createElement("div");
+      sgHeader.className = "tree-row subgroup-row";
+
+      const sgToggle = document.createElement("button");
+      sgToggle.className = "toggle";
+      sgToggle.setAttribute("aria-label", "Expand/Collapse Subgroup");
+      sgToggle.textContent = "▶";
+      sgHeader.appendChild(sgToggle);
+
+      const sgIcon = document.createElement("span");
+      sgIcon.className = "icon folder";
+      sgHeader.appendChild(sgIcon);
+
+      const sgLabel = document.createElement("span");
+      sgLabel.className = "label";
+      sgLabel.textContent = s || "(No Subgroup)";
+      sgHeader.appendChild(sgLabel);
+
+      const sgNode = document.createElement("ul");
+      sgNode.className = "children";
+      sgNode.setAttribute("role", "group");
+
+      for (const it of Array.isArray(items) ? items : []) {
+        const itLi = document.createElement("li");
+        itLi.className = "tree-item";
+
+        const row = document.createElement("div");
+        row.className = "tree-row item-row";
+
+        const docIcon = document.createElement("span");
+        docIcon.className = "icon doc";
+        row.appendChild(docIcon);
+
+        const title = document.createElement("span");
+        title.className = "label";
+        title.textContent = it.title || "(Untitled)";
+        row.appendChild(title);
+
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+        const btnCopy = document.createElement("button");
+        btnCopy.className = "btn xs";
+        btnCopy.textContent = "Copy";
+        const btnEdit = document.createElement("button");
+        btnEdit.className = "btn xs";
+        btnEdit.textContent = "Edit";
+        const btnDel = document.createElement("button");
+        btnDel.className = "btn xs danger";
+        btnDel.textContent = "Delete";
+        actions.append(btnCopy, btnEdit, btnDel);
+        row.appendChild(actions);
+
+        btnCopy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(it.content || "");
+          } catch {}
+        });
+        btnEdit.addEventListener("click", () => openEdit(it));
+        btnDel.addEventListener("click", () => openConfirmDelete(it));
+
+        itLi.appendChild(row);
+        sgNode.appendChild(itLi);
+      }
+
+      sgLi.appendChild(sgHeader);
+      sgLi.appendChild(sgNode);
+      gNode.appendChild(sgLi);
+
+      if (
+        (gSel && g === gSel && sSel && s === sSel) ||
+        pathMatchesSearch(items)
+      ) {
+        sgLi.setAttribute("aria-expanded", "true");
+        sgHeader.classList.add("expanded");
+        sgToggle.textContent = "▼";
+        gExpanded = true;
+      }
+
+      const toggleSg = () => {
+        const isOpen = sgLi.getAttribute("aria-expanded") === "true";
+        sgLi.setAttribute("aria-expanded", String(!isOpen));
+        sgHeader.classList.toggle("expanded", !isOpen);
+        sgToggle.textContent = !isOpen ? "▼" : "▶";
+      };
+      sgToggle.addEventListener("click", toggleSg);
+      sgHeader.addEventListener("click", (e) => {
+        if (e.target.closest(".row-actions")) return;
+        toggleSg();
+      });
+    }
+
+    if (gExpanded) {
+      gLi.setAttribute("aria-expanded", "true");
+      gHeader.className = "tree-row group-row expanded";
+      gToggle.textContent = "▼";
+    }
+
+    const toggleG = () => {
+      const isOpen = gLi.getAttribute("aria-expanded") === "true";
+      gLi.setAttribute("aria-expanded", String(!isOpen));
+      gHeader.classList.toggle("expanded", !isOpen);
+      gToggle.textContent = !isOpen ? "▼" : "▶";
+    };
+    gToggle.addEventListener("click", toggleG);
+    gHeader.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      toggleG();
+    });
+
+    treeRoot.appendChild(gLi);
+  }
+
   emptyState.classList.toggle("hidden", allPrompts.length !== 0);
 }
 
-// ===== CRUD & Dialogs =====
-function openCreate() {
-  promptForm.reset();
-  dialogTitle.textContent = "New Prompt";
-  formError.textContent = "";
-  promptIdInput.value = "";
-
-  const groupMap = buildGroupMaps(allPrompts);
-  groupSelect.innerHTML =
-    `<option value="">(Ungrouped)</option>` +
-    [...groupMap.keys()]
-      .map((g) => `<option>${escapeHtml(g)}</option>`)
-      .join("");
-  subgroupSelect.innerHTML = `<option value="">(None)</option>`;
-  subgroupSelect.disabled = false;
-
-  groupSelect.value = "";
-  subgroupSelect.value = "";
-
-  promptDialog.showModal();
-  titleInput.focus();
+/* ============ Filters (top of popup) ============ */
+function uniqueSorted(arr) {
+  return [...new Set(arr)].sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { sensitivity: "base" })
+  );
 }
 
-function openEdit(id) {
-  const p = allPrompts.find((x) => x.id === id);
-  if (!p) return;
+function rebuildGroupFilter(preserve = true) {
+  const prev = preserve ? groupFilter.value || "" : "";
+  const groups = uniqueSorted(allPrompts.map((p) => p.group || ""));
+  groupFilter.innerHTML =
+    `<option value="">All Groups</option>` +
+    groups.map((g) => `<option>${g}</option>`).join("");
+  if (prev === "" || groups.includes(prev)) groupFilter.value = prev;
+  else groupFilter.value = "";
+}
 
-  promptForm.reset();
-  dialogTitle.textContent = "Edit Prompt";
-  formError.textContent = "";
-  promptIdInput.value = p.id;
+function rebuildSubgroupFilter(preserve = true) {
+  const gSel = groupFilter.value || "";
+  const prev = preserve ? subgroupFilter.value || "" : "";
+  const subs = uniqueSorted(
+    allPrompts
+      .filter((p) => (p.group || "") === gSel)
+      .map((p) => p.subgroup || "")
+  );
+  subgroupFilter.innerHTML =
+    `<option value="">All Subgroups</option>` +
+    subs.map((s) => `<option>${s}</option>`).join("");
+  subgroupFilter.disabled = !gSel;
+  if (subs.length && (prev === "" || subs.includes(prev)))
+    subgroupFilter.value = prev;
+  else subgroupFilter.value = "";
+}
 
-  const groupMap = buildGroupMaps(allPrompts);
-  const groups = [...groupMap.keys()];
-  if (!groups.includes(p.group || "(Ungrouped)"))
-    groups.push(p.group || "(Ungrouped)");
-  groupSelect.innerHTML =
-    `<option value="">(Ungrouped)</option>` +
-    groups
-      .map(
-        (g) =>
-          `<option ${
-            g === (p.group || "(Ungrouped)") ? "selected" : ""
-          }>${escapeHtml(g)}</option>`
+function applyFiltersAndRender() {
+  const gSel = groupFilter.value || "";
+  const sSel = subgroupFilter.value || "";
+  const q = (searchInput.value || "").trim().toLowerCase();
+
+  filteredPrompts = allPrompts.filter((p) => {
+    if (gSel && (p.group || "") !== gSel) return false;
+    if (sSel && (p.subgroup || "") !== sSel) return false;
+    if (
+      q &&
+      !(
+        (p.title || "").toLowerCase().includes(q) ||
+        (p.content || "").toLowerCase().includes(q)
       )
-      .join("");
+    )
+      return false;
+    return true;
+  });
+  resultCount.textContent = `${filteredPrompts.length}`;
+  renderTree();
+}
 
-  const subgroups = [...(groupMap.get(p.group || "(Ungrouped)") || new Set())];
+/* ============ Dialog: options ============ */
+function dialogPopulateGroups(selected = "") {
+  const groups = uniqueSorted(allPrompts.map((p) => p.group || ""));
+  groupSelect.innerHTML =
+    `<option value="">(New Group… type below)</option>` +
+    groups.map((g) => `<option>${g}</option>`).join("");
+  groupSelect.value = selected && groups.includes(selected) ? selected : "";
+}
+
+function dialogPopulateSubgroups(groupValue, selected = "") {
+  const subs = uniqueSorted(
+    allPrompts
+      .filter((p) => (p.group || "") === (groupValue || ""))
+      .map((p) => p.subgroup || "")
+  );
   subgroupSelect.innerHTML =
-    `<option value="">(None)</option>` +
-    subgroups
-      .map(
-        (sg) =>
-          `<option ${sg === (p.subgroup || "") ? "selected" : ""}>${escapeHtml(
-            sg
-          )}</option>`
-      )
-      .join("");
-
-  titleInput.value = p.title;
-  contentInput.value = p.content;
-  groupNew.value = "";
-  subgroupNew.value = "";
-  promptDialog.showModal();
-  titleInput.focus();
+    `<option value="">(New Subgroup… type below)</option>` +
+    subs.map((s) => `<option>${s}</option>`).join("");
+  subgroupSelect.disabled = !groupValue;
+  subgroupSelect.value = selected && subs.includes(selected) ? selected : "";
 }
 
-function openDelete(id) {
-  const p = allPrompts.find((x) => x.id === id);
-  if (!p) return;
-  confirmPromptId.value = p.id;
-  confirmText.textContent = `Delete "${p.title}"? This cannot be undone.`;
+/* ============ CRUD dialog helpers ============ */
+function openCreate() {
+  dialogTitle.textContent = "New Prompt";
+  promptForm.reset();
+  inputId.value = "";
+
+  const gSel = groupFilter.value || "";
+  dialogPopulateGroups(gSel);
+  dialogPopulateSubgroups(gSel, "");
+
+  inputGroup.value = "";
+  inputSubgroup.value = "";
+  inputContent.innerHTML = "";
+
+  promptDialog.showModal();
+  highlightBrackets();
+}
+
+function openEdit(p) {
+  dialogTitle.textContent = "Edit Prompt";
+  inputId.value = p.id;
+  inputTitle.value = p.title || "";
+  inputContent.innerText = p.content || "";
+
+  dialogPopulateGroups(p.group || "");
+  dialogPopulateSubgroups(p.group || "", p.subgroup || "");
+  inputGroup.value = "";
+  inputSubgroup.value = "";
+
+  promptDialog.showModal();
+  highlightBrackets();
+}
+
+function openConfirmDelete(p) {
+  confirmTitle.textContent = `Delete “${p.title || "(Untitled)"}”?`;
+  document.getElementById("confirmPromptId").value = p.id;
   confirmDialog.showModal();
 }
 
-function resolveGroupAndSubgroup() {
-  const g = sanitize(groupNew.value) || sanitize(groupSelect.value) || "";
-  const sg =
-    sanitize(subgroupNew.value) || sanitize(subgroupSelect.value) || "";
-  return { group: g === "(Ungrouped)" ? "" : g, subgroup: sg };
+/* ============ Load / Save ============ */
+async function load() {
+  await ensureCSVInitialized();
+  const txt = await readCSVText();
+  allPrompts = csvTextToObjects(txt);
+  rebuildGroupFilter(true);
+  rebuildSubgroupFilter(true);
+  applyFiltersAndRender();
+}
+async function save() {
+  await writeCSVText(toCSV(allPrompts));
 }
 
-function validatePrompt({ id, group, subgroup, title, content }) {
-  if (!title) return "Title is required.";
-  if (!content) return "Prompt content is required.";
-  const targetKey = `${(group || "").toLowerCase()}::${(
-    subgroup || ""
-  ).toLowerCase()}::${title.toLowerCase()}`;
-  for (const p of allPrompts) {
-    if (p.id === id) continue;
-    const k = `${(p.group || "").toLowerCase()}::${(
-      p.subgroup || ""
-    ).toLowerCase()}::${p.title.toLowerCase()}`;
-    if (k === targetKey)
-      return "A prompt with this Title already exists in the same Group/Subgroup.";
-  }
-  return "";
-}
+/* ============ Events ============ */
+function bindEvents() {
+  // Filters
+  searchInput?.addEventListener("input", applyFiltersAndRender);
+  groupFilter?.addEventListener("change", () => {
+    rebuildSubgroupFilter(false);
+    applyFiltersAndRender();
+  });
+  subgroupFilter?.addEventListener("change", applyFiltersAndRender);
+  clearFiltersBtn?.addEventListener("click", () => {
+    groupFilter.value = "";
+    rebuildSubgroupFilter(false);
+    applyFiltersAndRender();
+  });
 
-// ===== Events: Filters/Search =====
-searchInput.addEventListener("input", () => {
-  filterItems();
-  renderTable();
-});
+  // Toolbar
+  btnNew?.addEventListener("click", openCreate);
+  btnEmptyCreate?.addEventListener("click", openCreate);
+  btnExport?.addEventListener("click", async () => {
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const blob = new Blob([toCSV(allPrompts)], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prompts-${ts}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+  fileImport?.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const text = await f.text();
+    const imported = csvTextToObjects(text);
+    const map = new Map(allPrompts.map((p) => [p.id, p]));
+    for (const p of imported)
+      map.set(p.id || crypto.randomUUID(), { ...map.get(p.id), ...p });
+    allPrompts = Array.from(map.values());
+    await save();
+    rebuildGroupFilter(true);
+    rebuildSubgroupFilter(true);
+    applyFiltersAndRender();
+    e.target.value = "";
+  });
 
-// Group changed → recompute lists from group perspective
-groupFilter.addEventListener("change", () => {
-  populateFilters("group");
-  filterItems();
-  renderTable();
-});
+  // Dialog buttons
+  btnDialogCancel?.addEventListener("click", () => promptDialog.close());
+  btnConfirmCancel?.addEventListener("click", () => confirmDialog.close());
 
-// Subgroup changed → recompute lists from subgroup perspective
-subgroupFilter.addEventListener("change", () => {
-  populateFilters("subgroup");
-  filterItems();
-  renderTable();
-});
-
-// Tiny ✕ button to clear both filters (safe if button not present yet)
-clearFiltersBtn?.addEventListener("click", () => {
-  groupFilter.value = "";
-  subgroupFilter.value = "";
-  populateFilters(null);
-  filterItems();
-  renderTable();
-});
-
-// ===== Events: New/Edit/Delete =====
-btnNew.addEventListener("click", openCreate);
-btnEmptyCreate.addEventListener("click", openCreate);
-
-btnExport.addEventListener("click", async () => {
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  downloadBlob(`prompts-${ts}.csv`, toCSV(allPrompts));
-});
-
-fileImport.addEventListener("change", (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      const text = String(reader.result || "");
-      const rows = parseCSV(text);
-      if (rows.length < 2)
-        throw new Error("CSV appears empty or lacks header.");
-
-      const header = rows[0].map((h) => h.trim().toLowerCase());
-      const expected = CSV_HEADERS.map((h) => h.toLowerCase());
-      const ok = expected.every((h, idx) => header[idx] === h);
-      if (!ok) throw new Error("CSV header mismatch. Use the exported format.");
-
-      const existingKeys = new Set(allPrompts.map(dedupeKey));
-      let imported = 0;
-      for (let i = 1; i < rows.length; i++) {
-        const [id, group, subgroup, title, content, createdAt, updatedAt] =
-          rows[i];
-        const obj = {
-          id: sanitize(id) || uuid(),
-          group: sanitize(group),
-          subgroup: sanitize(subgroup),
-          title: sanitize(title),
-          content: sanitize(content),
-          createdAt: sanitize(createdAt) || nowISO(),
-          updatedAt: sanitize(updatedAt) || nowISO(),
-        };
-        const key = dedupeKey(obj);
-        if (!obj.title || !obj.content) continue;
-        if (existingKeys.has(key)) continue;
-        allPrompts.push(obj);
-        existingKeys.add(key);
-        imported++;
-      }
-      await save();
-      render();
-      alert(`Imported ${imported} prompt(s).`);
-    } catch (err) {
-      alert(`Import failed: ${err.message || err}`);
-    } finally {
-      fileImport.value = "";
-    }
-  };
-  reader.onerror = () => {
-    alert("Failed to read file.");
-    fileImport.value = "";
-  };
-  reader.readAsText(file, "utf-8");
-});
-
-btnDialogCancel.addEventListener("click", () => promptDialog.close());
-btnConfirmCancel.addEventListener("click", () => confirmDialog.close());
-
-promptForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  formError.textContent = "";
-
-  const id = sanitize(promptIdInput.value) || uuid();
-  const { group, subgroup } = resolveGroupAndSubgroup();
-  const title = sanitize(titleInput.value);
-  const content = sanitize(contentInput.value);
-
-  const err = validatePrompt({ id, group, subgroup, title, content });
-  if (err) {
-    formError.textContent = err;
-    return;
-  }
-
-  const idx = allPrompts.findIndex((p) => p.id === id);
-  const now = nowISO();
-
-  if (idx >= 0) {
-    allPrompts[idx] = {
-      ...allPrompts[idx],
-      group,
-      subgroup,
-      title,
-      content,
+  // Forms
+  promptForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = inputId.value || crypto.randomUUID();
+    const now = new Date().toISOString();
+    const existingIdx = allPrompts.findIndex((p) => p.id === id);
+    const obj = {
+      id,
+      title: inputTitle.value.trim(),
+      content: inputContent.innerText,
+      group: (inputGroup.value || groupSelect.value || "").trim(),
+      subgroup: (inputSubgroup.value || subgroupSelect.value || "").trim(),
+      createdAt: existingIdx >= 0 ? allPrompts[existingIdx].createdAt : now,
       updatedAt: now,
     };
-  } else {
-    allPrompts.push({
-      id,
-      group,
-      subgroup,
-      title,
-      content,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+    if (existingIdx >= 0) allPrompts[existingIdx] = obj;
+    else allPrompts.push(obj);
 
-  try {
-    await save(); // persist to OPFS CSV
-    promptDialog.close();
-    render();
-  } catch (e2) {
-    formError.textContent = `Save failed: ${e2.message || e2}`;
-  }
-});
-
-confirmForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const id = sanitize(confirmPromptId.value);
-  const idx = allPrompts.findIndex((p) => p.id === id);
-  if (idx >= 0) {
-    allPrompts.splice(idx, 1);
     await save();
-    render();
-  }
-  confirmDialog.close();
-});
+    promptDialog.close();
+    rebuildGroupFilter(true);
+    rebuildSubgroupFilter(true);
+    applyFiltersAndRender();
+  });
 
-// Keyboard shortcuts
-document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+  confirmForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    openCreate();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
-    e.preventDefault();
-    searchInput.focus();
-    searchInput.select();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && promptDialog.open) {
-    e.preventDefault();
-    btnDialogSave.click();
-  }
-});
+    const id = document.getElementById("confirmPromptId").value;
+    allPrompts = allPrompts.filter((p) => p.id !== id);
+    await save();
+    confirmDialog.close();
+    rebuildGroupFilter(true);
+    rebuildSubgroupFilter(true);
+    applyFiltersAndRender();
+  });
 
-// Dialog: when Group changes, narrow Subgroup list
-groupSelect?.addEventListener("change", () => {
-  const g = sanitize(groupSelect.value) || "(Ungrouped)";
-  const map = buildGroupMaps(allPrompts);
-  const subs = [...(map.get(g) || new Set())];
-  subgroupSelect.innerHTML =
-    `<option value="">(None)</option>` +
-    subs.map((s) => `<option>${escapeHtml(s)}</option>`).join("");
-  subgroupSelect.disabled = false;
-});
+  // Dialog interactivity: when changing dialog group, update dialog subgroup
+  groupSelect?.addEventListener("change", () => {
+    if (groupSelect.value) inputGroup.value = "";
+    dialogPopulateSubgroups(groupSelect.value || "", "");
+  });
 
-// Row click to edit
-tbody.addEventListener("click", (e) => {
-  const tr = e.target.closest("tr");
-  if (!tr || e.target.closest("button")) return;
-  const id = tr.dataset.id;
-  if (id) openEdit(id);
-});
+  // Bracket highlighting for contentInput
+  inputContent?.addEventListener("input", highlightBrackets);
 
-// Initial load
-load();
+  // Keyboard
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      openCreate();
+    }
+    if (e.key === "Escape") {
+      if (promptDialog?.open) promptDialog.close();
+      if (confirmDialog?.open) confirmDialog.close();
+    }
+  });
+}
+
+/* ============ Bootstrap ============ */
+document.addEventListener("DOMContentLoaded", () => {
+  // filters/tree
+  searchInput = document.getElementById("searchInput");
+  groupFilter = document.getElementById("groupFilter");
+  subgroupFilter = document.getElementById("subgroupFilter");
+  clearFiltersBtn = document.getElementById("clearFilters");
+  resultCount = document.getElementById("resultCount");
+  emptyState = document.getElementById("emptyState");
+  treeRoot = document.getElementById("treeRoot");
+
+  // toolbar
+  btnNew = document.getElementById("btnNew");
+  btnEmptyCreate = document.getElementById("btnEmptyCreate");
+  btnExport = document.getElementById("btnExport");
+  fileImport = document.getElementById("fileImport");
+
+  // dialogs
+  promptDialog = document.getElementById("promptDialog");
+  promptForm = document.getElementById("promptForm");
+  dialogTitle = document.getElementById("dialogTitle");
+  inputId = document.getElementById("promptId");
+  inputTitle = document.getElementById("titleInput");
+  inputContent = document.getElementById("contentInput");
+  groupSelect = document.getElementById("groupSelect");
+  inputGroup = document.getElementById("groupNew");
+  subgroupSelect = document.getElementById("subgroupSelect");
+  inputSubgroup = document.getElementById("subgroupNew");
+
+  confirmDialog = document.getElementById("confirmDialog");
+  confirmForm = document.getElementById("confirmForm");
+  confirmTitle = document.getElementById("confirmTitle");
+  btnDialogCancel = document.getElementById("btnDialogCancel");
+  btnConfirmCancel = document.getElementById("btnConfirmCancel");
+
+  // Initialize highlighting
+  if (inputContent) {
+    highlightBrackets();
+  }
+
+  bindEvents();
+  load();
+});

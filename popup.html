@@ -32,15 +32,15 @@
       <select id="groupFilter" aria-label="Filter by group">
         <option value="">All Groups</option>
       </select>
-      <div style="display: flex; align-items: center; gap: 4px">
+      <div class="subgroup-with-clear">
         <select id="subgroupFilter" aria-label="Filter by subgroup" disabled>
           <option value="">All Subgroups</option>
         </select>
         <button
           id="clearFilters"
-          class="btn"
+          class="btn btn-icon"
           title="Clear Group & Subgroup"
-          style="padding: 4px 6px"
+          aria-label="Clear Group & Subgroup"
         >
           ✕
         </button>
@@ -50,30 +50,21 @@
 
     <section id="emptyState" class="empty hidden">
       <h2>No prompts yet</h2>
-      <p>
-        Create your first prompt. Organize by Group and Subgroup. All data stays
-        local.
-      </p>
+      <p>Create your first prompt. All data stays local.</p>
       <button id="btnEmptyCreate" class="btn primary">Create a Prompt</button>
     </section>
 
-    <section class="list">
-      <table id="promptTable" aria-label="Prompt list">
-        <thead>
-          <tr>
-            <th style="width: 28%">Title</th>
-            <th style="width: 18%">Group</th>
-            <th style="width: 18%">Subgroup</th>
-            <th style="width: 18%">Modified</th>
-            <th style="width: 18%">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="promptTbody"></tbody>
-      </table>
+    <!-- Folder-style tree -->
+    <section class="tree-container">
+      <ul
+        id="treeRoot"
+        class="tree"
+        role="tree"
+        aria-label="Prompt Library"
+      ></ul>
     </section>
 
     <!-- Modal: Add/Edit Prompt -->
-    <!-- NOTE: Added novalidate so our JS validation runs instead of HTML's -->
     <dialog id="promptDialog">
       <form method="dialog" id="promptForm" novalidate>
         <h3 id="dialogTitle">New Prompt</h3>
@@ -81,7 +72,6 @@
         <div class="row">
           <label>Group</label>
           <div class="grid-2">
-            <!-- Removed required -->
             <select id="groupSelect"></select>
             <input
               id="groupNew"
@@ -110,7 +100,7 @@
 
         <div class="row">
           <label for="contentInput">Prompt Content</label>
-          <textarea id="contentInput" rows="8" required></textarea>
+          <div id="contentInput" contenteditable="true"></div>
         </div>
 
         <div id="formError" class="error" role="alert" aria-live="polite"></div>
@@ -143,10 +133,6 @@
         <input type="hidden" id="confirmPromptId" />
       </form>
     </dialog>
-
-    <!-- <footer class="footer">
-      <span>The Knowledge Base</span>
-    </footer> -->
 
     <script src="popup.js" type="module"></script>
   </body>
